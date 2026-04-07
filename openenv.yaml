@@ -1,0 +1,15 @@
+name: content-moderation-env
+version: "0.1.0"
+description: "Real-world content moderation environment for training AI agents to apply community guidelines"
+author: "your-username"
+tags: ["content-moderation", "nlp", "real-world", "safety"]
+tasks:
+  - id: easy_explicit_hate
+    description: "Clear hate speech detection"
+    difficulty: easy
+  - id: medium_passive_harassment  
+    description: "Passive-aggressive demographic targeting"
+    difficulty: medium
+  - id: hard_satire_misinformation
+    description: "Satirical misinformation edge case"
+    difficulty: hard
