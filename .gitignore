@@ -1,7 +1,5 @@
-# Environment variables
+# Environment
 .env
-
-# Virtual environments
 venv/
 .venv/
 
@@ -9,9 +7,8 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
 
-# Build artifacts
+# Build files
 dist/
 build/
 *.egg-info/
@@ -22,11 +19,3 @@ Thumbs.db
 
 # Logs
 *.log
-
-# Python packaging
-*.egg
-pip-wheel-metadata/
-
-# IDE files
-.vscode/
-.idea/
