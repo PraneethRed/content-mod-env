@@ -79,7 +79,7 @@ async def reset(request: ResetRequest = Body(default=ResetRequest())):
 
 
 @app.post("/step", response_model=StepResponse)
-async def step(request: StepRequest = Body(default=StepRequest()))
+async def step(request: StepRequest = Body(default=StepRequest())):
     try:
         task_id = request.task_id or "easy_explicit_hate"
         env = get_env(task_id)
