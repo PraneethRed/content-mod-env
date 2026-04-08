@@ -1,6 +1,7 @@
 import uuid
 from typing import Dict, Tuple, Any
 from ..models import ContentModAction
+import random
 
 
 class MediumTask:
@@ -23,6 +24,12 @@ class MediumTask:
                 "author_history_score": 0.5,
                 "platform_context": "economic_forum",
                 "goal": "Identify passive-aggressive demographic targeting"
+            },
+            {
+                "post_text": "Wow great job genius, really impressive work there.",
+                "author_history_score": 0.35,
+                "platform_context": "gaming_forum",
+                "goal": "Detect passive aggressive harassment disguised as sarcasm"
             }
         ]
     
@@ -33,7 +40,7 @@ class MediumTask:
         
         ground_truth = {
             "category": "harassment",
-            "severity_target": 0.5,
+            "severity_target": 0.5 + random.uniform(-0.05, 0.05),
             "recommended_action": "warn",
             "related_categories": ["hate_speech"]
         }

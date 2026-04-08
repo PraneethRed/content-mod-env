@@ -1,6 +1,7 @@
 import uuid
 from typing import Dict, Tuple, Any
 from ..models import ContentModAction
+import random
 
 
 class EasyTask:
@@ -23,6 +24,12 @@ class EasyTask:
                 "author_history_score": 0.85,
                 "platform_context": "general_social_media",
                 "goal": "Identify and remove explicit hate speech"
+            },
+            {
+                "post_text": "People like you are disgusting and should not be allowed here.",
+                "author_history_score": 0.6,
+                "platform_context": "social_media",
+                "goal": "Detect explicit hateful harassment"
             }
         ]
     
@@ -33,7 +40,7 @@ class EasyTask:
         
         ground_truth = {
             "category": "hate_speech",
-            "severity_target": 0.8,
+            "severity_target": 0.8 + random.uniform(-0.05, 0.05),
             "recommended_action": "remove",
             "related_categories": ["harassment"]
         }

@@ -1,6 +1,7 @@
 import uuid
 from typing import Dict, Tuple, Any
 from ..models import ContentModAction
+import random
 
 
 class HardTask:
@@ -23,6 +24,12 @@ class HardTask:
                 "author_history_score": 0.1,
                 "platform_context": "satire_platform",
                 "goal": "Identify satirical content vs actual misinformation"
+            },
+            {
+                "post_text": "Breaking news: scientists confirm the moon is made of cheese. Stay informed!",
+                "author_history_score": 0.2,
+                "platform_context": "satirical_news",
+                "goal": "Distinguish satire from misinformation"
             }
         ]
     
@@ -33,7 +40,7 @@ class HardTask:
         
         ground_truth = {
             "category": "misinformation",
-            "severity_target": 0.6,
+            "severity_target": 0.4 + random.uniform(-0.05, 0.05),
             "recommended_action": "escalate",
             "related_categories": ["spam", "safe"]
         }
