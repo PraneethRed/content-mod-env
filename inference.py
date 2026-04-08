@@ -60,8 +60,10 @@ def get_grader(task_id: str):
     return graders.get(task_id, grader_easy)
 
 
+from fastapi import Body
+
 @app.post("/reset", response_model=ResetResponse)
-async def reset(request: ResetRequest):
+async def reset(request: ResetRequest = Body(default={})):
     try:
         task_id = request.task_id or "easy_explicit_hate"
         env = get_env(task_id)
@@ -77,7 +79,7 @@ async def reset(request: ResetRequest):
 
 
 @app.post("/step", response_model=StepResponse)
-async def step(request: StepRequest):
+async def step(request: StepRequest = Body(default={})):
     try:
         task_id = request.task_id or "easy_explicit_hate"
         env = get_env(task_id)
