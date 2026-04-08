@@ -11,4 +11,4 @@ RUN pip install openenv-core
 
 EXPOSE 7860
 
-CMD ["uv", "run", "server"]
+CMD ["python", "inference.py"]
