@@ -30,16 +30,19 @@ def compute_reward(action: ContentModAction, ground_truth: dict) -> ContentModRe
     if action_correct:
         score += 0.2
     
+    reasoning = action.reasoning.lower()
+
+
     if len(reasoning) > 40:
         score += 0.05
 
 
-   if any(word in reasoning for word in ["policy", "guideline", "harm", "context"]):
+    if any(word in reasoning for word in ["policy", "guideline", "harm", "context"]):
         score += 0.05
     
     if action.severity < 0.3 and action.recommended_action == "remove":
         score -= 0.15
-    
+  
     return ContentModReward(
         score=max(0.0, min(1.0, score)),
         category_correct=category_correct,
