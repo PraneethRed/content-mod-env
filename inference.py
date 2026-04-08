@@ -20,12 +20,12 @@ MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
 
 
 class ResetRequest(BaseModel):
-    task_id: Optional[str] = Field(default=None, description="Task ID to reset with")
+    task_id: Optional[str] = None
 
 
 class StepRequest(BaseModel):
-    action: Dict[str, Any]
-    task_id: Optional[str] = Field(default=None, description="Task ID for the action")
+    action: Optional[Dict[str, Any]] = None
+    task_id: Optional[str] = None
 
 
 class ResetResponse(BaseModel):
@@ -63,7 +63,7 @@ def get_grader(task_id: str):
 from fastapi import Body
 
 @app.post("/reset", response_model=ResetResponse)
-async def reset(request: ResetRequest = Body(default={})):
+async def reset(request: ResetRequest = Body(default=ResetRequest())):
     try:
         task_id = request.task_id or "easy_explicit_hate"
         env = get_env(task_id)
@@ -79,7 +79,7 @@ async def reset(request: ResetRequest = Body(default={})):
 
 
 @app.post("/step", response_model=StepResponse)
-async def step(request: StepRequest = Body(default={})):
+async def step(request: StepRequest = Body(default=StepRequest()))
     try:
         task_id = request.task_id or "easy_explicit_hate"
         env = get_env(task_id)
