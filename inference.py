@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import subprocess
 import requests
 from openai import OpenAI
 
@@ -16,6 +17,38 @@ TASKS = [
 ]
 
 client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
+
+
+def start_server():
+    """Start app.py in background if server not already running."""
+    try:
+        r = requests.get(f"{ENV_URL}/health", timeout=3)
+        if r.status_code == 200:
+            print("[INFO] Server already running")
+            return None
+    except Exception:
+        pass
+
+    print("[INFO] Starting server...")
+    proc = subprocess.Popen(
+        ["python", "app.py"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # Wait up to 30 seconds for server to be ready
+    for i in range(30):
+        time.sleep(1)
+        try:
+            r = requests.get(f"{ENV_URL}/health", timeout=3)
+            if r.status_code == 200:
+                print(f"[INFO] Server ready after {i+1}s")
+                return proc
+        except Exception:
+            pass
+
+    print("[ERROR] Server failed to start after 30s")
+    return proc
 
 
 def call_reset(task_id: str) -> dict:
@@ -124,7 +157,8 @@ def run_task(task_id: str) -> float:
 
 
 def main():
-    time.sleep(3)  # Wait for server to be fully up
+    server_proc = start_server()
+
     all_scores = {}
     for task_id in TASKS:
         try:
@@ -138,6 +172,9 @@ def main():
     print("\n[SUMMARY]")
     for task_id, score in all_scores.items():
         print(f"  {task_id}: {score:.4f}")
+
+    if server_proc:
+        server_proc.terminate()
 
 
 if __name__ == "__main__":
