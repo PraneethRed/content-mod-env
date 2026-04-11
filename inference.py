@@ -106,6 +106,44 @@ Respond ONLY with a JSON object with these exact fields:
 }}
 
 No explanation. No markdown. Just the JSON object."""
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.1
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+        action = json.loads(raw)
+
+        valid_categories = ["hate_speech", "harassment", "misinformation", "spam", "safe"]
+        valid_actions = ["remove", "warn", "no_action", "escalate"]
+        if action.get("category") not in valid_categories:
+            action["category"] = "safe"
+        if action.get("recommended_action") not in valid_actions:
+            action["recommended_action"] = "no_action"
+        try:
+            action["severity"] = max(0.0, min(1.0, float(action.get("severity", 0.5))))
+        except (ValueError, TypeError):
+            action["severity"] = 0.5
+        action["reasoning"] = str(action.get("reasoning", "No reasoning provided"))[:500]
+        return action
+
+    except Exception as e:
+        print(f"[ERROR] LLM call failed: {e}")
+        return {
+            "category": "safe",
+            "severity": 0.5,
+            "reasoning": "Fallback due to LLM error",
+            "recommended_action": "no_action",
+        }
+
 def run_task(task_id: str) -> float:
     print(f"[START] task={task_id}")
     reset_resp = call_reset(task_id)
