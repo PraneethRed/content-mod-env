@@ -1,144 +1,144 @@
 import os
 import json
-from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-import uvicorn
-
+import time
+import requests
 from openai import OpenAI
 
-from src.content_mod_env.env import ContentModEnv
-from src.content_mod_env.models import ContentModAction, ContentModObservation, ContentModReward
-from src.content_mod_env.graders.grader_easy import grader_easy
-from src.content_mod_env.graders.grader_medium import grader_medium
-from src.content_mod_env.graders.grader_hard import grader_hard
-
-# Environment variables
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+ENV_URL = os.getenv("ENV_URL", "http://localhost:7860")
+
+TASKS = [
+    "easy_explicit_hate",
+    "medium_passive_harassment",
+    "hard_satire_misinformation",
+]
+
+client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
 
 
-class ResetRequest(BaseModel):
-    task_id: Optional[str] = None
-
-
-class StepRequest(BaseModel):
-    action: Optional[Dict[str, Any]] = None
-    task_id: Optional[str] = None
-
-
-class ResetResponse(BaseModel):
-    observation: Dict[str, Any]
-    state: Dict[str, Any]
-
-
-class StepResponse(BaseModel):
-    observation: Dict[str, Any]
-    reward: Dict[str, Any]
-    done: bool
-    info: Dict[str, Any]
-
-
-app = FastAPI(title="Content Moderation Environment", version="0.1.0")
-
-env_instances: Dict[str, ContentModEnv] = {}
-
-
-def get_env(task_id: str = "easy_explicit_hate") -> ContentModEnv:
-    if task_id not in env_instances:
-        env_instances[task_id] = ContentModEnv(task_id)
-    return env_instances[task_id]
-
-
-def get_grader(task_id: str):
-    graders = {
-        "easy_explicit_hate": grader_easy,
-        "medium_passive_harassment": grader_medium,
-        "hard_satire_misinformation": grader_hard,
-    }
-    return graders.get(task_id, grader_easy)
-
-
-from fastapi import Body
-
-@app.post("/reset", response_model=ResetResponse)
-async def reset(request: ResetRequest = Body(default=ResetRequest())):
+def call_reset(task_id: str) -> dict:
     try:
-        task_id = request.task_id or "easy_explicit_hate"
-        env = get_env(task_id)
-        observation = env.reset(task_id if request.task_id else None)
-        state = env.state()
-        
-        return ResetResponse(
-            observation=observation.model_dump(),
-            state=state
+        r = requests.post(f"{ENV_URL}/reset", json={"task_id": task_id}, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print(f"[ERROR] /reset failed for {task_id}: {e}")
+        return {}
+
+
+def call_step(action: dict, task_id: str) -> dict:
+    try:
+        r = requests.post(f"{ENV_URL}/step", json={"action": action, "task_id": task_id}, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print(f"[ERROR] /step failed: {e}")
+        return {"reward": {"score": 0.0}, "done": True, "observation": {}}
+
+
+def get_llm_action(observation: dict) -> dict:
+    prompt = f"""You are a content moderation AI. Analyze this social media post and decide how to handle it.
+
+Post: {observation.get('post_text', '')}
+Platform context: {observation.get('platform_context', '')}
+Author history score: {observation.get('author_history_score', 0.5)}
+Goal: {observation.get('goal', '')}
+
+Respond ONLY with a JSON object with these exact fields:
+{{
+  "category": one of ["hate_speech", "harassment", "misinformation", "spam", "safe"],
+  "severity": a float between 0.0 and 1.0,
+  "reasoning": "your reasoning in under 500 characters",
+  "recommended_action": one of ["remove", "warn", "no_action", "escalate"]
+}}
+
+No explanation. No markdown. Just the JSON object."""
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.1,
         )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+        action = json.loads(raw)
+
+        valid_categories = ["hate_speech", "harassment", "misinformation", "spam", "safe"]
+        valid_actions = ["remove", "warn", "no_action", "escalate"]
+        if action.get("category") not in valid_categories:
+            action["category"] = "safe"
+        if action.get("recommended_action") not in valid_actions:
+            action["recommended_action"] = "no_action"
+        try:
+            action["severity"] = max(0.0, min(1.0, float(action.get("severity", 0.5))))
+        except (ValueError, TypeError):
+            action["severity"] = 0.5
+        action["reasoning"] = str(action.get("reasoning", "No reasoning provided"))[:500]
+        return action
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"[ERROR] LLM call failed: {e}")
+        return {
+            "category": "safe",
+            "severity": 0.5,
+            "reasoning": "Fallback due to LLM error",
+            "recommended_action": "no_action",
+        }
 
 
-@app.post("/step", response_model=StepResponse)
-async def step(request: StepRequest = Body(default=StepRequest())):
-    try:
-        task_id = request.task_id or "easy_explicit_hate"
-        env = get_env(task_id)
-        
-        action_data = request.action
-        action = ContentModAction(**action_data)
-        
-        observation, reward, done, info = env.step(action)
-        
-        grader = get_grader(task_id)
-        grader_score = grader(action, {"task_id": task_id})
-        info["grader_score"] = grader_score
-        
-        return StepResponse(
-            observation=observation.model_dump(),
-            reward=reward.model_dump(),
-            done=done,
-            info=info
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def run_task(task_id: str) -> float:
+    print(f"[START] task={task_id}")
+    reset_resp = call_reset(task_id)
+    if not reset_resp:
+        print(f"[END] task={task_id} score=0.0")
+        return 0.0
+
+    observation = reset_resp.get("observation", {})
+    total_score = 0.0
+    step_num = 0
+    done = False
+
+    while not done and step_num < 10:
+        step_num += 1
+        action = get_llm_action(observation)
+        step_resp = call_step(action, task_id)
+        reward_data = step_resp.get("reward", {})
+        score = float(reward_data.get("score", 0.0)) if reward_data else 0.0
+        total_score = score
+        done = step_resp.get("done", True)
+        observation = step_resp.get("observation", {})
+        print(f"[STEP {step_num}] action={action.get('recommended_action')} reward={score:.4f}")
+        if not done:
+            time.sleep(0.5)
+
+    print(f"[END] task={task_id} score={total_score:.4f}")
+    return total_score
 
 
-@app.get("/state")
-async def get_state(task_id: str = "easy_explicit_hate"):
-    try:
-        env = get_env(task_id)
-        return env.state()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def main():
+    time.sleep(3)  # Wait for server to be fully up
+    all_scores = {}
+    for task_id in TASKS:
+        try:
+            score = run_task(task_id)
+            all_scores[task_id] = score
+        except Exception as e:
+            print(f"[ERROR] Task {task_id} crashed: {e}")
+            all_scores[task_id] = 0.0
+        time.sleep(1)
 
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "environment": "content-moderation-env"}
-
-
-@app.get("/")
-async def root():
-    return {
-        "message": "Content Moderation Environment API",
-        "version": "0.1.0",
-        "endpoints": {
-            "reset": "/reset",
-            "step": "/step", 
-            "state": "/state",
-            "health": "/health"
-        },
-        "tasks": [
-            "easy_explicit_hate",
-            "medium_passive_harassment", 
-            "hard_satire_misinformation"
-        ]
-    }
+    print("\n[SUMMARY]")
+    for task_id, score in all_scores.items():
+        print(f"  {task_id}: {score:.4f}")
 
 
 if __name__ == "__main__":
-    print("[START] Content Moderation Environment Inference")
-    # Start FastAPI server
-    print("Starting FastAPI server...")
-    port = int(os.getenv("PORT", 7860))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    main()
